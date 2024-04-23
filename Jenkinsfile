@@ -2,7 +2,7 @@ pipeline {
     agent {
         dockerfile {
             filename 'Dockerfile.build'
-            args 'FILLME'
+            args '-v /root/.m2:/root/.m2 -v /var/run/docker.sock:/var/run/docker.sock'
         }
     }
 
@@ -31,7 +31,15 @@ pipeline {
                 sh 'mvn clean package -DskipTests'
             }
         }
-        
+
+        stage('SonarQube analysis') {
+            steps {
+                withSonarQubeEnv('SonarqubeServer') {
+                    sh 'mvn sonar:sonar -s .m2/settings.xml'
+                }
+            }
+        }
+
         stage('Quality Gate') {
             steps {
                 timeout(time: 60, unit: 'SECONDS') {
@@ -40,7 +48,7 @@ pipeline {
             }
         }
 
-        stage('Build and push IMAGE to Docker registry') {
+        stage('Build and push IMAGE to docker registry') {
             steps {
                 sh """
                     docker build -t ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG} .
@@ -50,4 +58,4 @@ pipeline {
             }
         }
     }
-}
+}8/

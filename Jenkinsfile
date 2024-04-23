@@ -1,10 +1,11 @@
 pipeline {
-    agent {
+    /*agent {
         dockerfile {
             filename 'Dockerfile.build'
             args '-v /root/.m2:/root/.m2 -v /var/run/docker.sock:/var/run/docker.sock'
         }
-    }
+    }*/
+    agent any
 
     environment {
         DOCKERHUB_AUTH = credentials('DockerHubCredentials')

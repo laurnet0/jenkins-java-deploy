@@ -15,6 +15,8 @@ pipeline {
         IMAGE_TAG = "latest"
         SPRING_DATASOURCE_URL="jdbc:mysql://172.17.0.1:3306/db_paymybuddy"
         EXPOSE_PORT="8090"
+        CONTAINER_SQL="container_sql"
+        CONTAINER_APP="paymybuddy"
     }
 
     stages {
@@ -75,10 +77,10 @@ pipeline {
                         scp src/main/resources/database/create.sql centos@${HOSTNAME_DEPLOY_STAGING}:/home/centos/
                         command1="echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin"
                         command2="docker pull ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        command3="docker rm -f paymybuddy || echo 'app does not exist'"
-                        command4="docker run --name mysql-paymybuddy -p 3306:3306 -e MYSQL_ROOT_PASSWORD=${MYSQL_AUTH_PSW} -d mysql || echo 'database already up'"
-                        command5="docker exec -i mysql-paymybuddy sh -c 'exec mysql -u${MYSQL_AUTH_USR} -p${MYSQL_AUTH_PSW} ' < create.sql || echo 'database already exit'"
-                        command6="docker run --name paymybuddy -e SPRING_DATASOURCE_USERNAME=${MYSQL_AUTH_USR} -e SPRING_DATASOURCE_PASSWORD=${MYSQL_AUTH_PSW} -e SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL} -p ${EXPOSE_PORT}:8080 ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        command3="docker rm -f ${CONTAINER_APP} || echo 'app does not exist'"
+                        command4="docker run -d --name ${CONTAINER_SQL} -p 3306:3306 -e MYSQL_ROOT_PASSWORD=${MYSQL_AUTH_PSW} -d mysql || echo 'database already up'"
+                        command5="docker exec -i ${CONTAINER_SQL} sh -c 'exec mysql -u${MYSQL_AUTH_USR} -p${MYSQL_AUTH_PSW} ' < create.sql || echo 'database already exist'"
+                        command6="docker run -d --name ${CONTAINER_APP} -e SPRING_DATASOURCE_USERNAME=${MYSQL_AUTH_USR} -e SPRING_DATASOURCE_PASSWORD=${MYSQL_AUTH_PSW} -e SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL} -p ${EXPOSE_PORT}:8080 ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
                         ssh -t centos@${HOSTNAME_DEPLOY_STAGING} \
                             -o SendEnv=IMAGE_NAME \
                             -o SendEnv=IMAGE_TAG \
@@ -88,12 +90,47 @@ pipeline {
                             -o SendEnv=MYSQL_AUTH_PSW \
                             -o SendEnv=SPRING_DATASOURCE_URL \
                             -o SendEnv=EXPOSE_PORT \
-                            -C "$command1 && $command2 && $command3 && $command4"
+                            -o SendEnv=CONTAINER_APP \
+                            -o SendEnv=CONTAINER_SQL \
+                            -C "$command1 && $command2 && $command3 && $command4 && $command5 && $command6"
                     '''
                 }
             }
         }
 
+         stage ('Deploy in prod') {
+            agent any
+            environment {
+                HOSTNAME_DEPLOY_PROD = "3.85.31.2"
+            }
+            steps {
+                sshagent(credentials: ['SSH_AUTH_SERVER']) { 
+                    sh '''
+                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
+                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
+                        scp src/main/resources/database/create.sql centos@${HOSTNAME_DEPLOY_PROD}:/home/centos/
+                        command1="echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin"
+                        command2="docker pull ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        command3="docker rm -f ${CONTAINER_APP} || echo 'app does not exist'"
+                        command4="docker run -d --name ${CONTAINER_SQL} -p 3306:3306 -e MYSQL_ROOT_PASSWORD=${MYSQL_AUTH_PSW} -d mysql || echo 'database already up'"
+                        command5="docker exec -i ${CONTAINER_SQL} sh -c 'exec mysql -u${MYSQL_AUTH_USR} -p${MYSQL_AUTH_PSW} ' < create.sql || echo 'database already exist'"
+                        command6="docker run -d --name ${CONTAINER_APP} -e SPRING_DATASOURCE_USERNAME=${MYSQL_AUTH_USR} -e SPRING_DATASOURCE_PASSWORD=${MYSQL_AUTH_PSW} -e SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL} -p ${EXPOSE_PORT}:8080 ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        ssh -t centos@${HOSTNAME_DEPLOY_PROD} \
+                            -o SendEnv=IMAGE_NAME \
+                            -o SendEnv=IMAGE_TAG \
+                            -o SendEnv=DOCKERHUB_AUTH_USR \
+                            -o SendEnv=DOCKERHUB_AUTH_PSW \
+                            -o SendEnv=MYSQL_AUTH_USR \
+                            -o SendEnv=MYSQL_AUTH_PSW \
+                            -o SendEnv=SPRING_DATASOURCE_URL \
+                            -o SendEnv=EXPOSE_PORT \
+                            -o SendEnv=CONTAINER_APP \
+                            -o SendEnv=CONTAINER_SQL \
+                            -C "$command1 && $command2 && $command3 && $command4 && $command5 && $command6"
+                    '''
+                }
+            }
+        }
 
     }
 }

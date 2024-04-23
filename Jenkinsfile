@@ -9,6 +9,8 @@ pipeline {
     environment {
         DOCKERHUB_AUTH = credentials('DockerHubCredentials')
         ID_DOCKER = "${DOCKERHUB_AUTH_USR}" // ou votre username directement
+        IMAGE_NAME = "paymybuddy"
+        IMAGE_TAG = "latest"
     }
 
     stages {
@@ -39,11 +41,13 @@ pipeline {
         }
 
         stage('Build and push IMAGE to Docker registry') {
-            sh """
-                docker build -t ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG} .
-                echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin
-                docker push ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}
-            """
+            steps {
+                sh """
+                    docker build -t ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG} .
+                    echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin
+                    docker push ${ID_DOCKER}/${IMAGE_NAME}:${IMAGE_TAG}
+                """
+            }
         }
     }
 }
